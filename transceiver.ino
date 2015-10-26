@@ -1,5 +1,5 @@
-#define NUM_NODES     130  // maximum LED node number we can receive from Raspberry Pi
-#define SPIRE_MAXLEN  600  // maximum message length we can relay to the spire controller
+#define NUM_NODES     100  // maximum LED node number we can receive from Raspberry Pi
+#define SPIRE_MAXLEN  60   // maximum message length we can relay to the spire controller
 
 #define NODES_SERIAL1  45
 #define NODES_SERIAL2  45
@@ -42,6 +42,8 @@ int serial3_buffer_length;
 
 void setup()
 {
+  startupBlink();
+
   Serial1.begin(115200);
   Serial2.begin(115200);
   Serial3.begin(115200);
@@ -54,7 +56,7 @@ void setup()
 // this code determines which LEDs are mapped to Serial1
 void queue_nodes_serial1(void)
 {
-  int begin_led = 0;
+  int begin_led = 1;
 
   for (int i=0; i<NODES_SERIAL1; i++) {
     queue_serial1[i*3+0] = incoming_nodes[(begin_led+i)*3+0];
@@ -67,7 +69,7 @@ void queue_nodes_serial1(void)
 // this code determines which LEDs are mapped to Serial2
 void queue_nodes_serial2(void)
 {
-  int begin_led = 45;
+  int begin_led = 46;
 
   for (int i=0; i<NODES_SERIAL2; i++) {
     queue_serial2[i*3+0] = incoming_nodes[(begin_led+i)*3+0];
@@ -99,6 +101,8 @@ void loop()
       // begin spire message
       incoming_state = 2;
       incoming_index = 0;
+      incoming_spire_message[incoming_index] = c;
+      incoming_index++;
     } else if (c == '%') {
       // end spire message
       if (incoming_state == 2 && incoming_index > 0) {
@@ -258,3 +262,16 @@ void loop()
 
 }
 
+void startupBlink() {
+  // turn on the LED
+  pinMode(13, OUTPUT);
+
+  for(int x = 0; x < 4; x++) {
+    digitalWrite(13, HIGH);
+    delayMicroseconds(100000);
+    digitalWrite(13, LOW);
+    delayMicroseconds(100000);
+  }
+
+  digitalWrite(13, HIGH);
+}
