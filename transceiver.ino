@@ -1,3 +1,5 @@
+// @001002003004#
+
 #define NUM_NODES     100  // maximum LED node number we can receive from Raspberry Pi
 #define SPIRE_MAXLEN  60   // maximum message length we can relay to the spire controller
 
@@ -40,6 +42,11 @@ int serial1_buffer_length;
 int serial2_buffer_length;
 int serial3_buffer_length;
 
+// fallback amination
+unsigned long lastSpireFallbackAt;
+unsigned long lastHeardSerialAt;
+int globalHue = 0;
+
 void setup()
 {
   startupBlink();
@@ -50,6 +57,9 @@ void setup()
   serial1_buffer_length = Serial1.availableForWrite();
   serial2_buffer_length = Serial2.availableForWrite();
   serial3_buffer_length = Serial3.availableForWrite();
+
+  lastHeardSerialAt = millis();
+  lastSpireFallbackAt = millis();
 }
 
 // copy data from incoming_nodes[] to queue_serial1[]
@@ -83,6 +93,9 @@ void loop()
   // Receive any incoming data from the Raspberry Pi
   int avail = Serial.available();
   while (avail > 0) {
+
+    lastHeardSerialAt = millis();
+
     unsigned char c = Serial.read();
     if (c == '@') {
       // begin RGB LED node data
@@ -259,19 +272,138 @@ void loop()
 
   // TODO: timeout?  maybe automatically play animations
   //  if the Raspberry Pi doesn't send data??
+  if (lastHeardSerialAt + 10 * 1000 < millis()) // havent heard serial for 10 seconds
+  {
+    fadeNext();
+  }
 
 }
+
+// the loop routine runs over and over again forever:
+void blink() {
+  digitalWrite(13, HIGH);   // turn the LED on (HIGH is the voltage level)
+
+  delay(1000);               // wait for a second
+  digitalWrite(13, LOW);    // turn the LED off by making the voltage LOW
+  delay(1000);               // wait for a second
+}
+
 
 void startupBlink() {
   // turn on the LED
   pinMode(13, OUTPUT);
 
-  for(int x = 0; x < 4; x++) {
+  for(int x = 0; x < 3; x++) {
     digitalWrite(13, HIGH);
-    delayMicroseconds(100000);
+    delayMicroseconds(10000);
     digitalWrite(13, LOW);
-    delayMicroseconds(100000);
+    delayMicroseconds(10000);
   }
 
   digitalWrite(13, HIGH);
+}
+
+void fadeNext() {
+  int hue = globalHue + 1;
+  if (hue == 360) {
+    hue = 0;
+  }
+  setLedColorHSV(hue,1,1); //We are using Saturation and Value constant at 1
+  globalHue = hue;
+//  delay(50); //each color will be shown for 10 milliseconds
+}
+
+void setColor(int r, int g, int b) {
+
+  Serial1.begin(38400);
+  Serial1.write(0); // start of frame message
+  Serial1.flush();
+  Serial1.begin(115200);
+  Serial1.write(0);
+
+  Serial2.begin(38400);
+  Serial2.write(0); // start of frame message
+  Serial2.flush();
+  Serial2.begin(115200);
+  Serial2.write(0);
+
+  for (int i=1; i <= NUM_NODES; i++) {
+    Serial1.write(r);
+    Serial1.write(g);
+    Serial1.write(b);
+
+    Serial2.write(r);
+    Serial2.write(g);
+    Serial2.write(b);
+  }
+
+  if (lastSpireFallbackAt + 1500 < millis()) {
+    Serial3.begin(38400);
+    Serial3.write(0); // start of frame message
+    Serial3.flush();
+    Serial3.begin(115200);
+    Serial3.write(0);
+
+    Serial3.printf("$%03d%03d%03d%", r, g, b);
+
+    lastSpireFallbackAt = millis();
+  }
+}
+
+
+
+void setLedColorHSV(int h, double s, double v) {
+  //this is the algorithm to convert from RGB to HSV
+  double r=0;
+  double g=0;
+  double b=0;
+
+  double hf=h/60.0;
+
+  int i=(int)floor(h/60.0);
+  double f = h/60.0 - i;
+  double pv = v * (1 - s);
+  double qv = v * (1 - s*f);
+  double tv = v * (1 - s * (1 - f));
+
+  switch (i)
+  {
+  case 0: //rojo dominante
+    r = v;
+    g = tv;
+    b = pv;
+    break;
+  case 1: //verde
+    r = qv;
+    g = v;
+    b = pv;
+    break;
+  case 2:
+    r = pv;
+    g = v;
+    b = tv;
+    break;
+  case 3: //azul
+    r = pv;
+    g = qv;
+    b = v;
+    break;
+  case 4:
+    r = tv;
+    g = pv;
+    b = v;
+    break;
+  case 5: //rojo
+    r = v;
+    g = pv;
+    b = qv;
+    break;
+  }
+
+  //set each component to a integer value between 0 and 255
+  int red=constrain((int)255*r,0,255);
+  int green=constrain((int)255*g,0,255);
+  int blue=constrain((int)255*b,0,255);
+
+  setColor(red,green,blue);
 }
